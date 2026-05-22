@@ -1,0 +1,42 @@
+[package]
+name = "robit-link-mover"
+version = "0.1.0"
+description = "Windows-only GUI mover that leaves a link at the original path."
+authors = ["Robit"]
+edition = "2021"
+rust-version = "1.77"
+default-run = "robit-link-mover"
+
+[lib]
+name = "robit_link_mover_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "robit-helper"
+path = "src/bin/robit_helper.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.0", features = [] }
+tauri-plugin-dialog = "2.0"
+thiserror = "1.0"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+walkdir = "2.5"
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Registry",
+  "Win32_System_RestartManager",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging"
+] }

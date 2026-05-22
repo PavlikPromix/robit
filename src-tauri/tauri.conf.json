@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Robit Link Mover",
+  "version": "0.1.0",
+  "identifier": "local.robit.link-mover",
+  "build": {
+    "beforeDevCommand": "npm run build:helper:dev && npm run vite:dev",
+    "beforeBuildCommand": "npm run typecheck && npm run build:frontend && npm run build:helper:release",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Robit Link Mover",
+        "width": 1040,
+        "height": 760,
+        "minWidth": 760,
+        "minHeight": 620,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "nsis",
+    "icon": ["icons/icon.ico"]
+  }
+}

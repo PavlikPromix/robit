@@ -1,0 +1,32 @@
+{
+  "name": "robit-link-mover",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "vite:dev": "vite --host 127.0.0.1 --port 1420",
+    "build:frontend": "vite build",
+    "build:helper": "npm run build:helper:dev",
+    "build:helper:dev": "cargo build --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/target-codex --bin robit-helper",
+    "build:helper:release": "cargo build --release --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/target-codex --bin robit-helper",
+    "dev": "tauri dev",
+    "build": "node scripts/tauri-build.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
