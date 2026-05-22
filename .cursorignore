@@ -1,0 +1,41 @@
+# Keep AI context on source; exclude build output, deps, and local caches.
+# Uses .gitignore syntax. Cursor also respects .gitignore automatically.
+
+# Dependencies and frontend build
+node_modules/
+dist/
+
+# Rust / Tauri build artifacts
+src-tauri/target/
+src-tauri/target-codex/
+src-tauri/gen/
+
+# Local tooling
+.chrome-ui-check/
+.codegraph/
+
+# Logs and scratch
+*.log
+ui-check.png
+
+# Secrets (hard block even if referenced manually)
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Lockfiles (large, low signal for codegen)
+package-lock.json
+
+# Compiled binaries and debug symbols
+*.exe
+*.dll
+*.pdb
+*.msi
+
+# Version control and IDE noise
+.git/
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
