@@ -9,6 +9,7 @@
     "build:helper": "npm run build:helper:dev",
     "build:helper:dev": "cargo build --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/target-codex --bin robit-helper",
     "build:helper:release": "cargo build --release --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/target-codex --bin robit-helper",
+    "prepare:helper-sidecar": "node scripts/prepare-helper-sidecar.mjs",
     "dev": "tauri dev",
     "build": "node scripts/tauri-build.mjs",
     "preview": "vite preview",

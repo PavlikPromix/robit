@@ -129,11 +129,26 @@ fn locate_helper() -> Result<PathBuf> {
         return Ok(same_dir);
     }
 
+    let same_dir_sidecar = current_exe.with_file_name("robit-helper-x86_64-pc-windows-msvc.exe");
+    if same_dir_sidecar.exists() {
+        return Ok(same_dir_sidecar);
+    }
+
     let debug_target = current_exe
         .parent()
         .and_then(|path| path.parent())
         .map(|target| target.join("robit-helper.exe"));
     if let Some(path) = debug_target {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    let debug_sidecar = current_exe
+        .parent()
+        .and_then(|path| path.parent())
+        .map(|target| target.join("robit-helper-x86_64-pc-windows-msvc.exe"));
+    if let Some(path) = debug_sidecar {
         if path.exists() {
             return Ok(path);
         }

@@ -5,7 +5,7 @@
   "identifier": "local.robit.link-mover",
   "build": {
     "beforeDevCommand": "npm run build:helper:dev && npm run vite:dev",
-    "beforeBuildCommand": "npm run typecheck && npm run build:frontend && npm run build:helper:release",
+    "beforeBuildCommand": "npm run typecheck && npm run build:frontend && npm run prepare:helper-sidecar && npm run build:helper:release && npm run prepare:helper-sidecar",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
@@ -29,8 +29,9 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "targets": "nsis",
+    "externalBin": ["binaries/robit-helper"],
     "icon": ["icons/icon.ico"]
   }
 }
