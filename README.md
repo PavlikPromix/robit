@@ -31,7 +31,3 @@ The helper is built before `tauri dev`/`tauri build`, so both executables are av
 - Completed operations are stored in `%LOCALAPPDATA%\RobitLinkMover\operations.sqlite`.
 - Logs are stored in `%LOCALAPPDATA%\RobitLinkMover\logs`.
 - The elevated helper is launched through UAC only for move/rollback operations.
-
-## Current Build Note
-
-This workspace currently does not expose `cargo`/`rustc` in `PATH`, so only the TypeScript and Vite frontend checks were run here.
