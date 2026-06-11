@@ -54,7 +54,7 @@ pub fn start_move(
 ) -> Result<OperationSnapshot, String> {
     let mut preview = build_preview(&request).map_err(error_string)?;
     if request.skip_lock_check.unwrap_or(false) {
-        emit_progress(&app, 1, 1, "Использую свежую проверку блокировок");
+        emit_progress(&app, 1, 1, "Пропускаю проверку блокировок");
     } else {
         preview.locks =
             detect_locks_with_progress(Path::new(&preview.source_path), |current, total, _| {

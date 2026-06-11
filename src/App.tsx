@@ -163,6 +163,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [elevated, setElevated] = useState(false);
+  const [checkLocksBeforeMove, setCheckLocksBeforeMove] = useState(true);
   const [previewProgress, setPreviewProgress] = useState<ProgressSnapshot | null>(null);
   const [previewCheck, setPreviewCheck] = useState<PreviewCheck | null>(null);
 
@@ -309,14 +310,20 @@ export default function App() {
     setLogLines([]);
     setLogOffset(0);
     const canReusePreview =
+      checkLocksBeforeMove &&
       previewCheck !== null &&
       previewCheck.key === previewKey(sourcePath, destinationParent, strategy) &&
       !previewCheck.hasLocks &&
       Date.now() - previewCheck.checkedAt < PREVIEW_REUSE_MS;
+    const skipLockCheck = !checkLocksBeforeMove || canReusePreview;
     setPreviewProgress({
       current: 0,
       total: 1,
-      label: canReusePreview ? "Запуск без повторной проверки" : "Проверка перед запуском"
+      label: !checkLocksBeforeMove
+        ? "Запуск без проверки блокировок"
+        : canReusePreview
+          ? "Запуск без повторной проверки"
+          : "Проверка перед запуском"
     });
     try {
       const result = await invoke<OperationSnapshot>("start_move", {
@@ -324,7 +331,7 @@ export default function App() {
           source_path: sourcePath,
           destination_parent: destinationParent,
           strategy,
-          skip_lock_check: canReusePreview
+          skip_lock_check: skipLockCheck
         }
       });
       setActiveOperation(result);
@@ -483,6 +490,21 @@ export default function App() {
 					Прямой `/MOVE` быстрее для больших папок, но отмена во время копирования менее надежна.
 				  </div>
 				)}
+
+				<label className="option-row">
+				  <input
+					type="checkbox"
+					checked={checkLocksBeforeMove}
+					onChange={(event) => setCheckLocksBeforeMove(event.target.checked)}
+				  />
+				  <ShieldCheck size={18} />
+				  <span>
+					<strong>Проверять блокировки перед переносом</strong>
+					<small>
+					  Если отключить, перенос стартует без предварительной проверки занятых файлов.
+					</small>
+				  </span>
+				</label>
 
 				{!elevated && (
 				  <div className="admin-box">

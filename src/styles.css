@@ -335,7 +335,8 @@ code {
 
 .notice,
 .error-line,
-.admin-box {
+.admin-box,
+.option-row {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -370,6 +371,43 @@ code {
   flex: 1;
   min-width: 0;
   line-height: 1.55;
+}
+
+.option-row {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(13, 18, 22, 0.38);
+  color: #c8cbd2;
+  cursor: pointer;
+}
+
+.option-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #f0b739;
+}
+
+.option-row svg {
+  flex: 0 0 auto;
+  color: #f0b739;
+}
+
+.option-row span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+
+.option-row strong {
+  color: #e5e7eb;
+  font-size: 14px;
+}
+
+.option-row small {
+  color: #9da4af;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .actions {
