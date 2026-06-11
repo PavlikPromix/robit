@@ -2,8 +2,6 @@
 
 Windows-only GUI utility for moving a file or folder to another drive/location while keeping the original path alive through a link.
 
-The existing `move_to_other_drive.bat` is left unchanged. This app is a new Tauri 2 + Rust implementation with a React UI.
-
 ## Prerequisites
 
 - Windows 10/11
