@@ -26,6 +26,7 @@ pub fn build_preview(request: &MoveRequest) -> Result<MovePreview> {
 
     Ok(MovePreview {
         source_path: source.to_string_lossy().to_string(),
+        destination_parent: destination_parent.to_string_lossy().to_string(),
         destination_path: destination.to_string_lossy().to_string(),
         item_kind,
         locks: Vec::new(),

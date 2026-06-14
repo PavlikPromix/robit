@@ -85,6 +85,7 @@ pub struct FileLock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MovePreview {
     pub source_path: String,
+    pub destination_parent: String,
     pub destination_path: String,
     pub item_kind: ItemKind,
     pub locks: Vec<FileLock>,
@@ -101,6 +102,7 @@ pub struct ProgressSnapshot {
 pub struct OperationSnapshot {
     pub id: String,
     pub source_path: String,
+    pub destination_parent: String,
     pub destination_path: String,
     pub item_kind: ItemKind,
     pub strategy: MoveStrategy,

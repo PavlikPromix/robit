@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
+use std::process::Command;
 
 use anyhow::{Context, Result};
 use tauri::Emitter;
@@ -80,6 +81,7 @@ pub fn start_move(
 
     let operation = journal::create_operation(
         preview.source_path,
+        preview.destination_parent,
         preview.destination_path,
         preview.item_kind,
         request.strategy,
@@ -127,6 +129,19 @@ pub fn rollback_operation(id: String) -> Result<OperationSnapshot, String> {
     Ok(updated)
 }
 
+#[tauri::command]
+pub fn open_path_in_explorer(path: String) -> Result<(), String> {
+    let target = Path::new(&path);
+    let mut command = Command::new("explorer.exe");
+    if target.is_file() {
+        command.arg(format!("/select,{}", windows_path_arg(target)));
+    } else {
+        command.arg(windows_path_arg(target));
+    }
+    command.spawn().map_err(error_string)?;
+    Ok(())
+}
+
 fn launch_helper(action: HelperAction, operation: &OperationSnapshot) -> Result<()> {
     let request_path = journal::request_file_path(&operation.id)?;
     let cancel_path = journal::cancel_file_path(&operation.id)?;
@@ -157,4 +172,15 @@ fn emit_progress(app: &tauri::AppHandle, current: usize, total: usize, label: &s
 
 fn error_string(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+fn windows_path_arg(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = value.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        value.to_string()
+    }
 }

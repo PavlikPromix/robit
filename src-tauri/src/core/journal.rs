@@ -40,6 +40,7 @@ pub fn init_db() -> Result<()> {
         CREATE TABLE IF NOT EXISTS operations (
             id TEXT PRIMARY KEY,
             source_path TEXT NOT NULL,
+            destination_parent TEXT NOT NULL,
             destination_path TEXT NOT NULL,
             item_kind TEXT NOT NULL,
             strategy TEXT NOT NULL,
@@ -55,6 +56,7 @@ pub fn init_db() -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_operations_created_at ON operations(created_at DESC);
         "#,
     )?;
+    ensure_column(&conn, "destination_parent", "TEXT")?;
     ensure_column(&conn, "progress_current", "INTEGER")?;
     ensure_column(&conn, "progress_total", "INTEGER")?;
     ensure_column(&conn, "progress_label", "TEXT")?;
@@ -63,6 +65,7 @@ pub fn init_db() -> Result<()> {
 
 pub fn create_operation(
     source_path: String,
+    destination_parent: String,
     destination_path: String,
     item_kind: ItemKind,
     strategy: MoveStrategy,
@@ -76,6 +79,7 @@ pub fn create_operation(
     let op = OperationSnapshot {
         id,
         source_path,
+        destination_parent,
         destination_path,
         item_kind,
         strategy,
@@ -93,13 +97,14 @@ pub fn create_operation(
     conn.execute(
         r#"
         INSERT INTO operations
-        (id, source_path, destination_path, item_kind, strategy, status, created_at, updated_at, log_path, error_message,
+        (id, source_path, destination_parent, destination_path, item_kind, strategy, status, created_at, updated_at, log_path, error_message,
          progress_current, progress_total, progress_label)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         "#,
         params![
             op.id,
             op.source_path,
+            op.destination_parent,
             op.destination_path,
             serde_json::to_string(&op.item_kind)?,
             serde_json::to_string(&op.strategy)?,
@@ -121,7 +126,7 @@ pub fn list_operations() -> Result<Vec<OperationSnapshot>> {
     let conn = Connection::open(db_path()?)?;
     let mut stmt = conn.prepare(
         r#"
-        SELECT id, source_path, destination_path, item_kind, strategy, status,
+        SELECT id, source_path, destination_parent, destination_path, item_kind, strategy, status,
                created_at, updated_at, log_path, error_message,
                progress_current, progress_total, progress_label
         FROM operations
@@ -142,7 +147,7 @@ pub fn get_operation(id: &str) -> Result<OperationSnapshot> {
     let conn = Connection::open(db_path()?)?;
     conn.query_row(
         r#"
-        SELECT id, source_path, destination_path, item_kind, strategy, status,
+        SELECT id, source_path, destination_parent, destination_path, item_kind, strategy, status,
                created_at, updated_at, log_path, error_message,
                progress_current, progress_total, progress_label
         FROM operations
@@ -199,9 +204,11 @@ pub fn write_json_file<T: serde::Serialize>(path: &Path, value: &T) -> Result<()
 }
 
 fn row_to_operation(row: &rusqlite::Row<'_>) -> rusqlite::Result<OperationSnapshot> {
-    let item_kind_json: String = row.get(3)?;
-    let strategy_json: String = row.get(4)?;
-    let status_text: String = row.get(5)?;
+    let destination_parent: Option<String> = row.get(2)?;
+    let destination_path: String = row.get(3)?;
+    let item_kind_json: String = row.get(4)?;
+    let strategy_json: String = row.get(5)?;
+    let status_text: String = row.get(6)?;
     let item_kind = serde_json::from_str(&item_kind_json).map_err(json_error)?;
     let strategy = serde_json::from_str(&strategy_json).map_err(json_error)?;
     let status = OperationStatus::try_from(status_text.as_str()).map_err(|error| {
@@ -214,18 +221,28 @@ fn row_to_operation(row: &rusqlite::Row<'_>) -> rusqlite::Result<OperationSnapsh
     Ok(OperationSnapshot {
         id: row.get(0)?,
         source_path: row.get(1)?,
-        destination_path: row.get(2)?,
+        destination_parent: destination_parent
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| fallback_destination_parent(&destination_path)),
+        destination_path,
         item_kind,
         strategy,
         status,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        log_path: row.get(8)?,
-        error_message: row.get(9)?,
-        progress_current: row.get(10)?,
-        progress_total: row.get(11)?,
-        progress_label: row.get(12)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        log_path: row.get(9)?,
+        error_message: row.get(10)?,
+        progress_current: row.get(11)?,
+        progress_total: row.get(12)?,
+        progress_label: row.get(13)?,
     })
+}
+
+fn fallback_destination_parent(destination_path: &str) -> String {
+    Path::new(destination_path)
+        .parent()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default()
 }
 
 fn ensure_column(conn: &Connection, name: &str, definition: &str) -> Result<()> {

@@ -1,9 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -17,7 +18,9 @@ use robit_link_mover_lib::core::journal;
 use robit_link_mover_lib::core::models::{
     HelperAction, HelperInvocation, ItemKind, MoveStrategy, OperationSnapshot, OperationStatus,
 };
-use robit_link_mover_lib::core::robocopy::{robocopy_exit_description, robocopy_exit_ok};
+use robit_link_mover_lib::core::robocopy::{
+    robocopy_exit_description, robocopy_exit_ok, robocopy_line_indicates_access_block,
+};
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Copy)]
@@ -26,6 +29,11 @@ struct Workload {
     bytes: u64,
     entries: u64,
     copy_units: u64,
+}
+
+enum RobocopyEvent {
+    Line(String),
+    ReadError(String),
 }
 
 fn main() {
@@ -368,25 +376,61 @@ fn run_robocopy(
     let mut command = Command::new("robocopy");
     command
         .args(&args)
-        .stdout(Stdio::from(log_file.try_clone()?))
-        .stderr(Stdio::from(log_file));
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     hide_child_window(&mut command);
     let mut child = command.spawn().context("cannot start robocopy")?;
+    let stdout = child.stdout.take().context("cannot read robocopy stdout")?;
+    let stderr = child.stderr.take().context("cannot read robocopy stderr")?;
+    let (tx, rx) = mpsc::channel();
+    let stdout_thread = spawn_robocopy_log_reader(stdout, tx.clone());
+    let stderr_thread = spawn_robocopy_log_reader(stderr, tx);
 
     loop {
+        if let Some(line) = drain_robocopy_events(&rx, &log_file, true)? {
+            write_log(
+                op,
+                &format!("Обнаружена ошибка доступа robocopy: {line}. Останавливаю перенос."),
+            )?;
+            let _ = child.kill();
+            let _ = child.wait();
+            stop_progress.store(true, Ordering::Relaxed);
+            let _ = progress_thread.join();
+            let _ = stdout_thread.join();
+            let _ = stderr_thread.join();
+            let _ = drain_robocopy_events(&rx, &log_file, false);
+            cleanup_interrupted_robocopy(source, destination, move_files, op)?;
+            bail!("robocopy stopped after access error: {line}");
+        }
+
         if cancel_requested(cancel_path) {
             write_log(op, "Получена отмена: останавливаю robocopy")?;
             let _ = child.kill();
             let _ = child.wait();
             stop_progress.store(true, Ordering::Relaxed);
             let _ = progress_thread.join();
-            cleanup_destination(destination, ItemKind::Directory)?;
+            let _ = stdout_thread.join();
+            let _ = stderr_thread.join();
+            let _ = drain_robocopy_events(&rx, &log_file, false);
+            cleanup_interrupted_robocopy(source, destination, move_files, op)?;
             journal::update_status(&op.id, OperationStatus::Cancelled, None)?;
             return Ok(());
         }
 
         if let Some(status) = child.try_wait()? {
             let code = status.code().unwrap_or(16);
+            stop_progress.store(true, Ordering::Relaxed);
+            let _ = progress_thread.join();
+            let _ = stdout_thread.join();
+            let _ = stderr_thread.join();
+            if let Some(line) = drain_robocopy_events(&rx, &log_file, true)? {
+                write_log(
+                    op,
+                    &format!("Обнаружена ошибка доступа robocopy: {line}. Выполняю откат."),
+                )?;
+                cleanup_interrupted_robocopy(source, destination, move_files, op)?;
+                bail!("robocopy stopped after access error: {line}");
+            }
             write_log(
                 op,
                 &format!(
@@ -394,9 +438,8 @@ fn run_robocopy(
                     robocopy_exit_description(code)
                 ),
             )?;
-            stop_progress.store(true, Ordering::Relaxed);
-            let _ = progress_thread.join();
             if !robocopy_exit_ok(code) {
+                cleanup_interrupted_robocopy(source, destination, move_files, op)?;
                 bail!("robocopy failed with exit code {code}");
             }
             journal::update_progress(
@@ -410,6 +453,74 @@ fn run_robocopy(
 
         thread::sleep(Duration::from_millis(500));
     }
+}
+
+fn spawn_robocopy_log_reader<R>(reader: R, tx: Sender<RobocopyEvent>) -> thread::JoinHandle<()>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let reader = BufReader::new(reader);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    if tx.send(RobocopyEvent::Line(line)).is_err() {
+                        return;
+                    }
+                }
+                Err(error) => {
+                    let _ = tx.send(RobocopyEvent::ReadError(error.to_string()));
+                    return;
+                }
+            }
+        }
+    })
+}
+
+fn drain_robocopy_events(
+    rx: &Receiver<RobocopyEvent>,
+    mut log_file: &fs::File,
+    stop_on_access_block: bool,
+) -> Result<Option<String>> {
+    let mut access_block = None;
+    while let Ok(event) = rx.try_recv() {
+        match event {
+            RobocopyEvent::Line(line) => {
+                writeln!(log_file, "{line}")?;
+                if stop_on_access_block
+                    && access_block.is_none()
+                    && robocopy_line_indicates_access_block(&line)
+                {
+                    access_block = Some(line);
+                }
+            }
+            RobocopyEvent::ReadError(error) => {
+                writeln!(log_file, "ERROR: cannot read robocopy output: {error}")?;
+            }
+        }
+    }
+    Ok(access_block)
+}
+
+fn cleanup_interrupted_robocopy(
+    source: &Path,
+    destination: &Path,
+    move_files: bool,
+    op: &OperationSnapshot,
+) -> Result<()> {
+    if move_files {
+        if destination.exists() {
+            write_log(
+                op,
+                "Возвращаю частично перенесенные файлы из назначения обратно в источник",
+            )?;
+            restore_source_from_destination(destination, source, ItemKind::Directory)?;
+            write_log(op, "Частичный перенос возвращен в исходное место")?;
+        }
+    } else {
+        cleanup_destination(destination, ItemKind::Directory)?;
+    }
+    Ok(())
 }
 
 fn delete_source(

@@ -28,7 +28,8 @@ body {
   min-height: 620px;
 }
 
-button {
+button,
+input {
   font: inherit;
 }
 
@@ -272,6 +273,34 @@ code {
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.path-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  overflow: hidden;
+  padding: 0 16px;
+  border: 1px solid #343b45;
+  border-radius: 8px;
+  outline: none;
+  background: rgba(13, 18, 22, 0.62);
+  color: #d7dbe3;
+  font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 13px;
+  line-height: 46px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-input::placeholder {
+  color: #727b88;
+}
+
+.path-input:focus {
+  border-color: #f0b739;
+  box-shadow: 0 0 0 2px rgba(240, 183, 57, 0.14);
 }
 
 .icon-button,
@@ -651,6 +680,34 @@ button:disabled {
 .operation-summary span {
   color: #c5cad3;
   text-align: center;
+}
+
+.path-link {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c5cad3;
+  cursor: pointer;
+  text-align: left;
+}
+
+.path-link svg {
+  color: #f0b739;
+}
+
+.path-link code {
+  min-width: 0;
+}
+
+.path-link:hover code {
+  border-color: #4b5563;
+  background: rgba(31, 38, 46, 0.9);
+  color: #f4f6fa;
 }
 
 .log-output {

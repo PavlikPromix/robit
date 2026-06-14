@@ -7,6 +7,7 @@ import {
   ArchiveRestore,
   CheckCircle2,
   FolderInput,
+  FolderOpen,
   FolderOutput,
   History,
   Link2,
@@ -47,6 +48,7 @@ type FileLock = {
 
 type MovePreview = {
   source_path: string;
+  destination_parent: string;
   destination_path: string;
   item_kind: ItemKind;
   locks: FileLock[];
@@ -55,6 +57,7 @@ type MovePreview = {
 type OperationSnapshot = {
   id: string;
   source_path: string;
+  destination_parent: string;
   destination_path: string;
   item_kind: ItemKind;
   strategy: MoveStrategy;
@@ -86,6 +89,13 @@ type LogRead = {
 };
 
 const PREVIEW_REUSE_MS = 60_000;
+const APP_SETTINGS_KEY = "robit-link-mover-settings";
+
+type AppSettings = {
+  sourcePath: string;
+  destinationParent: string;
+  checkLocksBeforeMove: boolean;
+};
 
 const statusLabels: Record<OperationStatus, string> = {
   planned: "Запланировано",
@@ -102,6 +112,24 @@ const statusLabels: Record<OperationStatus, string> = {
 
 function formatPath(path: string) {
   return path || "Не выбрано";
+}
+
+function loadSettings(): AppSettings {
+  try {
+    const raw = window.localStorage.getItem(APP_SETTINGS_KEY);
+    if (!raw) {
+      return { sourcePath: "", destinationParent: "", checkLocksBeforeMove: true };
+    }
+    const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    return {
+      sourcePath: typeof parsed.sourcePath === "string" ? parsed.sourcePath : "",
+      destinationParent: typeof parsed.destinationParent === "string" ? parsed.destinationParent : "",
+      checkLocksBeforeMove:
+        typeof parsed.checkLocksBeforeMove === "boolean" ? parsed.checkLocksBeforeMove : true
+    };
+  } catch {
+    return { sourcePath: "", destinationParent: "", checkLocksBeforeMove: true };
+  }
 }
 
 function canRollback(op: OperationSnapshot) {
@@ -152,8 +180,9 @@ function currentWindow() {
 }
 
 export default function App() {
-  const [sourcePath, setSourcePath] = useState("");
-  const [destinationParent, setDestinationParent] = useState("");
+  const [settingsLoaded] = useState(loadSettings);
+  const [sourcePath, setSourcePath] = useState(settingsLoaded.sourcePath);
+  const [destinationParent, setDestinationParent] = useState(settingsLoaded.destinationParent);
   const [strategy, setStrategy] = useState<MoveStrategy>("safe_copy_delete");
   const [preview, setPreview] = useState<MovePreview | null>(null);
   const [operations, setOperations] = useState<OperationSnapshot[]>([]);
@@ -163,7 +192,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [elevated, setElevated] = useState(false);
-  const [checkLocksBeforeMove, setCheckLocksBeforeMove] = useState(true);
+  const [checkLocksBeforeMove, setCheckLocksBeforeMove] = useState(settingsLoaded.checkLocksBeforeMove);
   const [previewProgress, setPreviewProgress] = useState<ProgressSnapshot | null>(null);
   const [previewCheck, setPreviewCheck] = useState<PreviewCheck | null>(null);
 
@@ -184,6 +213,13 @@ export default function App() {
       .then(setElevated)
       .catch(() => setElevated(false));
   }, [refreshOperations]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      APP_SETTINGS_KEY,
+      JSON.stringify({ sourcePath, destinationParent, checkLocksBeforeMove })
+    );
+  }, [sourcePath, destinationParent, checkLocksBeforeMove]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -227,16 +263,29 @@ export default function App() {
   const selectedOperation = useMemo(() => activeOperation ?? operations[0] ?? null, [activeOperation, operations]);
   const selectedRemaining = selectedOperation ? estimateRemaining(selectedOperation) : null;
 
+  function clearPreviewState() {
+    setPreview(null);
+    setPreviewProgress(null);
+    setPreviewCheck(null);
+  }
+
+  function updateSourcePath(value: string) {
+    setSourcePath(value);
+    clearPreviewState();
+  }
+
+  function updateDestinationParent(value: string) {
+    setDestinationParent(value);
+    clearPreviewState();
+  }
+
   async function pickSource() {
     const selected = await open({
       multiple: false,
       directory: false
     });
     if (typeof selected === "string") {
-      setSourcePath(selected);
-      setPreview(null);
-      setPreviewProgress(null);
-      setPreviewCheck(null);
+      updateSourcePath(selected);
     }
   }
 
@@ -246,10 +295,7 @@ export default function App() {
       directory: true
     });
     if (typeof selected === "string") {
-      setSourcePath(selected);
-      setPreview(null);
-      setPreviewProgress(null);
-      setPreviewCheck(null);
+      updateSourcePath(selected);
     }
   }
 
@@ -259,18 +305,31 @@ export default function App() {
       directory: true
     });
     if (typeof selected === "string") {
-      setDestinationParent(selected);
-      setPreview(null);
-      setPreviewProgress(null);
-      setPreviewCheck(null);
+      updateDestinationParent(selected);
     }
   }
 
   function changeStrategy(value: MoveStrategy) {
     setStrategy(value);
-    setPreview(null);
-    setPreviewProgress(null);
-    setPreviewCheck(null);
+    clearPreviewState();
+  }
+
+  async function openPath(path: string) {
+    if (!path) return;
+    try {
+      await invoke("open_path_in_explorer", { path });
+    } catch (error) {
+      setMessage(String(error));
+    }
+  }
+
+  function selectOperation(op: OperationSnapshot) {
+    setActiveOperation(op);
+    setSourcePath(op.source_path);
+    setDestinationParent(op.destination_parent);
+    clearPreviewState();
+    setLogLines([]);
+    setLogOffset(0);
   }
 
   async function buildPreview() {
@@ -446,7 +505,14 @@ export default function App() {
 				  <label>
 					<span>Источник</span>
 					<div className="path-row">
-					  <code title={sourcePath}>{formatPath(sourcePath)}</code>
+					  <input
+						className="path-input"
+						value={sourcePath}
+						onChange={(event) => updateSourcePath(event.target.value)}
+						placeholder="C:\\путь\\к\\файлу или папке"
+						title={sourcePath}
+						spellCheck={false}
+					  />
 					  <button type="button" className="icon-button" onClick={pickSource} title="Выбрать файл">
 						<FolderInput size={18} />
 					  </button>
@@ -459,7 +525,14 @@ export default function App() {
 				  <label>
 					<span>Папка назначения</span>
 					<div className="path-row">
-					  <code title={destinationParent}>{formatPath(destinationParent)}</code>
+					  <input
+						className="path-input"
+						value={destinationParent}
+						onChange={(event) => updateDestinationParent(event.target.value)}
+						placeholder="C:\\папка\\назначения"
+						title={destinationParent}
+						spellCheck={false}
+					  />
 					  <button type="button" className="icon-button" onClick={pickDestination} title="Выбрать папку назначения">
 						<FolderOutput size={18} />
 					  </button>
@@ -597,16 +670,14 @@ export default function App() {
 					  type="button"
 					  key={op.id}
 					  className={selectedOperation?.id === op.id ? "operation active" : "operation"}
-					  onClick={() => {
-						setActiveOperation(op);
-						setLogLines([]);
-						setLogOffset(0);
-					  }}
+					  onClick={() => selectOperation(op)}
 					>
 					  <span className={`dot ${op.status}`} />
 					  <span>
 						<strong>{statusLabels[op.status]}</strong>
-						<small title={op.source_path}>{op.source_path}</small>
+						<small title={`${op.source_path} → ${op.destination_parent}`}>
+						  {op.source_path} → {op.destination_parent}
+						</small>
 					  </span>
 					</button>
 				  ))}
@@ -632,9 +703,25 @@ export default function App() {
 			  </div>
 			  {selectedOperation && (
 				<div className="operation-summary">
-				  <code>{selectedOperation.source_path}</code>
+				  <button
+					type="button"
+					className="path-link"
+					onClick={() => openPath(selectedOperation.source_path)}
+					title="Открыть источник в проводнике"
+				  >
+					<FolderOpen size={15} />
+					<code>{formatPath(selectedOperation.source_path)}</code>
+				  </button>
 				  <span>→</span>
-				  <code>{selectedOperation.destination_path}</code>
+				  <button
+					type="button"
+					className="path-link"
+					onClick={() => openPath(selectedOperation.destination_parent)}
+					title="Открыть папку назначения в проводнике"
+				  >
+					<FolderOpen size={15} />
+					<code>{formatPath(selectedOperation.destination_parent)}</code>
+				  </button>
 				</div>
 			  )}
 			  {selectedOperation && selectedOperation.progress_total != null && (

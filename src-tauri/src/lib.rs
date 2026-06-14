@@ -13,7 +13,8 @@ pub fn run() {
             commands::cancel_operation,
             commands::list_operations,
             commands::read_operation_log,
-            commands::rollback_operation
+            commands::rollback_operation,
+            commands::open_path_in_explorer
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Robit Link Mover");
