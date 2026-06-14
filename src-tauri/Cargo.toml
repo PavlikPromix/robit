@@ -1,6 +1,6 @@
 [package]
 name = "robit-link-mover"
-version = "1.2.0"
+version = "1.3.0"
 description = "Windows-only GUI mover that leaves a link at the original path."
 authors = ["Robit"]
 edition = "2021"

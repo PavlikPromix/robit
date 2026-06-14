@@ -174,6 +174,28 @@ pub fn update_status(id: &str, status: OperationStatus, error_message: Option<&s
     Ok(())
 }
 
+pub fn mark_failed(id: &str, error_message: &str) -> Result<()> {
+    init_db()?;
+    let now = Utc::now().to_rfc3339();
+    let conn = Connection::open(db_path()?)?;
+    conn.execute(
+        r#"
+        UPDATE operations
+        SET status = ?2, updated_at = ?3, error_message = ?4,
+            progress_current = NULL, progress_total = NULL, progress_label = ?5
+        WHERE id = ?1
+        "#,
+        params![
+            id,
+            OperationStatus::Failed.as_str(),
+            now,
+            error_message,
+            format!("Ошибка: {error_message}"),
+        ],
+    )?;
+    Ok(())
+}
+
 pub fn update_progress(id: &str, current: u64, total: u64, label: impl AsRef<str>) -> Result<()> {
     init_db()?;
     let now = Utc::now().to_rfc3339();

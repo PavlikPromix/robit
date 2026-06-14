@@ -6,7 +6,7 @@ use walkdir::WalkDir;
 use super::models::FileLock;
 
 const MAX_LOCK_SCAN_FILES: usize = 2_000;
-const LOCK_PROGRESS_INTERVAL: usize = 25;
+const LOCK_BATCH_SIZE: usize = 64;
 
 pub fn detect_locks(source: &Path) -> Result<Vec<FileLock>> {
     detect_locks_with_progress(source, |_, _, _| {})
@@ -20,12 +20,17 @@ where
     let total = paths.len();
     let mut locks = Vec::new();
     on_progress(0, total, source);
-    for (index, path) in paths.into_iter().enumerate() {
-        locks.extend(detect_locks_for_single_path(&path)?);
-        let current = index + 1;
-        if current == total || current % LOCK_PROGRESS_INTERVAL == 0 {
-            on_progress(current, total, &path);
+
+    for (chunk_index, chunk) in paths.chunks(LOCK_BATCH_SIZE).enumerate() {
+        let batch_locks = detect_locks_for_path_batch(chunk)?;
+        if !batch_locks.is_empty() {
+            for path in chunk {
+                locks.extend(detect_locks_for_single_path(path)?);
+            }
         }
+
+        let current = ((chunk_index + 1) * LOCK_BATCH_SIZE).min(total);
+        on_progress(current, total, chunk.last().unwrap());
     }
     Ok(locks)
 }
@@ -46,6 +51,17 @@ fn paths_to_probe(source: &Path) -> Vec<PathBuf> {
 
 #[cfg(windows)]
 fn detect_locks_for_single_path(path: &Path) -> Result<Vec<FileLock>> {
+    detect_locks_for_paths(&[path], Some(path))
+}
+
+#[cfg(windows)]
+fn detect_locks_for_path_batch(paths: &[PathBuf]) -> Result<Vec<FileLock>> {
+    let path_refs: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
+    detect_locks_for_paths(&path_refs, None)
+}
+
+#[cfg(windows)]
+fn detect_locks_for_paths(paths: &[&Path], exact_path: Option<&Path>) -> Result<Vec<FileLock>> {
     use std::iter;
     use std::mem::zeroed;
     use std::os::windows::ffi::OsStrExt;
@@ -56,6 +72,10 @@ fn detect_locks_for_single_path(path: &Path) -> Result<Vec<FileLock>> {
         RM_PROCESS_INFO,
     };
 
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let mut session = 0u32;
     let mut session_key = vec![0u16; CCH_RM_SESSION_KEY as usize + 1];
     let start_code = unsafe { RmStartSession(&mut session, 0, session_key.as_mut_ptr()) };
@@ -64,12 +84,16 @@ fn detect_locks_for_single_path(path: &Path) -> Result<Vec<FileLock>> {
     }
 
     let result = (|| {
-        let wide_path: Vec<u16> = path
-            .as_os_str()
-            .encode_wide()
-            .chain(iter::once(0))
+        let wide_paths: Vec<Vec<u16>> = paths
+            .iter()
+            .map(|path| {
+                path.as_os_str()
+                    .encode_wide()
+                    .chain(iter::once(0))
+                    .collect()
+            })
             .collect();
-        let resources = [wide_path.as_ptr()];
+        let resources: Vec<*const u16> = wide_paths.iter().map(|path| path.as_ptr()).collect();
         let register_code = unsafe {
             RmRegisterResources(
                 session,
@@ -121,7 +145,9 @@ fn detect_locks_for_single_path(path: &Path) -> Result<Vec<FileLock>> {
             .into_iter()
             .take(count as usize)
             .map(|process| FileLock {
-                path: path.to_string_lossy().to_string(),
+                path: exact_path
+                    .map(|path| path.to_string_lossy().to_string())
+                    .unwrap_or_else(|| format!("Пачка из {} файлов", paths.len())),
                 pid: process.Process.dwProcessId,
                 process_name: wide_fixed_to_string(&process.strAppName),
                 application_name: wide_fixed_to_string(&process.strServiceShortName),
@@ -138,6 +164,11 @@ fn detect_locks_for_single_path(path: &Path) -> Result<Vec<FileLock>> {
 
 #[cfg(not(windows))]
 fn detect_locks_for_single_path(_path: &Path) -> Result<Vec<FileLock>> {
+    Ok(Vec::new())
+}
+
+#[cfg(not(windows))]
+fn detect_locks_for_path_batch(_paths: &[PathBuf]) -> Result<Vec<FileLock>> {
     Ok(Vec::new())
 }
 

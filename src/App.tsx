@@ -94,6 +94,7 @@ const APP_SETTINGS_KEY = "robit-link-mover-settings";
 type AppSettings = {
   sourcePath: string;
   destinationParent: string;
+  strategy: MoveStrategy;
   checkLocksBeforeMove: boolean;
 };
 
@@ -118,17 +119,32 @@ function loadSettings(): AppSettings {
   try {
     const raw = window.localStorage.getItem(APP_SETTINGS_KEY);
     if (!raw) {
-      return { sourcePath: "", destinationParent: "", checkLocksBeforeMove: true };
+      return {
+        sourcePath: "",
+        destinationParent: "",
+        strategy: "safe_copy_delete",
+        checkLocksBeforeMove: true
+      };
     }
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    const strategy =
+      parsed.strategy === "robocopy_move" || parsed.strategy === "safe_copy_delete"
+        ? parsed.strategy
+        : "safe_copy_delete";
     return {
       sourcePath: typeof parsed.sourcePath === "string" ? parsed.sourcePath : "",
       destinationParent: typeof parsed.destinationParent === "string" ? parsed.destinationParent : "",
+      strategy,
       checkLocksBeforeMove:
         typeof parsed.checkLocksBeforeMove === "boolean" ? parsed.checkLocksBeforeMove : true
     };
   } catch {
-    return { sourcePath: "", destinationParent: "", checkLocksBeforeMove: true };
+    return {
+      sourcePath: "",
+      destinationParent: "",
+      strategy: "safe_copy_delete",
+      checkLocksBeforeMove: true
+    };
   }
 }
 
@@ -163,6 +179,9 @@ function formatDuration(ms: number) {
 }
 
 function estimateRemaining(op: OperationSnapshot) {
+  if (!["planned", "copying", "copied", "deleting_source", "linking", "rolling_back"].includes(op.status)) {
+    return null;
+  }
   const current = op.progress_current ?? 0;
   const total = op.progress_total ?? 0;
   if (total <= 0 || current <= 0 || current >= total) return null;
@@ -183,7 +202,7 @@ export default function App() {
   const [settingsLoaded] = useState(loadSettings);
   const [sourcePath, setSourcePath] = useState(settingsLoaded.sourcePath);
   const [destinationParent, setDestinationParent] = useState(settingsLoaded.destinationParent);
-  const [strategy, setStrategy] = useState<MoveStrategy>("safe_copy_delete");
+  const [strategy, setStrategy] = useState<MoveStrategy>(settingsLoaded.strategy);
   const [preview, setPreview] = useState<MovePreview | null>(null);
   const [operations, setOperations] = useState<OperationSnapshot[]>([]);
   const [activeOperation, setActiveOperation] = useState<OperationSnapshot | null>(null);
@@ -217,9 +236,9 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(
       APP_SETTINGS_KEY,
-      JSON.stringify({ sourcePath, destinationParent, checkLocksBeforeMove })
+      JSON.stringify({ sourcePath, destinationParent, strategy, checkLocksBeforeMove })
     );
-  }, [sourcePath, destinationParent, checkLocksBeforeMove]);
+  }, [sourcePath, destinationParent, strategy, checkLocksBeforeMove]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -327,6 +346,7 @@ export default function App() {
     setActiveOperation(op);
     setSourcePath(op.source_path);
     setDestinationParent(op.destination_parent);
+    setStrategy(op.strategy);
     clearPreviewState();
     setLogLines([]);
     setLogOffset(0);
@@ -727,7 +747,11 @@ export default function App() {
 			  {selectedOperation && selectedOperation.progress_total != null && (
 				<section className="progress-box operation-progress" aria-live="polite">
 				  <div className="progress-head">
-					<span>{selectedOperation.progress_label || statusLabels[selectedOperation.status]}</span>
+					<span>
+					  {selectedOperation.status === "failed" && selectedOperation.error_message
+					    ? `Ошибка: ${selectedOperation.error_message}`
+					    : selectedOperation.progress_label || statusLabels[selectedOperation.status]}
+					</span>
 					<strong>{progressPercent(selectedOperation.progress_current, selectedOperation.progress_total)}%</strong>
 				  </div>
 				  <div className="progress-track">
@@ -742,6 +766,12 @@ export default function App() {
 					{selectedRemaining && <span>Осталось примерно {selectedRemaining}</span>}
 				  </div>
 				</section>
+			  )}
+			  {selectedOperation?.status === "failed" && selectedOperation.error_message && (
+				<div className="error-line">
+				  <XCircle size={18} />
+				  {selectedOperation.error_message}
+				</div>
 			  )}
 			  <pre className="log-output">
 				{logLines.length === 0 ? "Логи появятся после запуска операции." : logLines.join("\n")}

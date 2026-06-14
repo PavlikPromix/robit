@@ -29,7 +29,19 @@ pub fn restart_as_admin(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn preview_move(app: tauri::AppHandle, request: MoveRequest) -> Result<MovePreview, String> {
+pub async fn preview_move(
+    app: tauri::AppHandle,
+    request: MoveRequest,
+) -> Result<MovePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || preview_move_blocking(app, request))
+        .await
+        .map_err(error_string)?
+}
+
+fn preview_move_blocking(
+    app: tauri::AppHandle,
+    request: MoveRequest,
+) -> Result<MovePreview, String> {
     let mut preview = build_preview(&request).map_err(error_string)?;
     preview.locks =
         detect_locks_with_progress(Path::new(&preview.source_path), |current, total, _| {
@@ -49,7 +61,16 @@ pub fn preview_move(app: tauri::AppHandle, request: MoveRequest) -> Result<MoveP
 }
 
 #[tauri::command]
-pub fn start_move(
+pub async fn start_move(
+    app: tauri::AppHandle,
+    request: MoveRequest,
+) -> Result<OperationSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || start_move_blocking(app, request))
+        .await
+        .map_err(error_string)?
+}
+
+fn start_move_blocking(
     app: tauri::AppHandle,
     request: MoveRequest,
 ) -> Result<OperationSnapshot, String> {

@@ -57,11 +57,7 @@ fn run() -> Result<()> {
     if let Err(error) = result {
         let message = format!("{error:#}");
         let _ = write_log(&invocation.operation, &format!("ERROR: {message}"));
-        let _ = journal::update_status(
-            &invocation.operation.id,
-            OperationStatus::Failed,
-            Some(&message),
-        );
+        let _ = journal::mark_failed(&invocation.operation.id, &message);
         return Err(error);
     }
 
@@ -400,7 +396,9 @@ fn run_robocopy(
             let _ = stderr_thread.join();
             let _ = drain_robocopy_events(&rx, &log_file, false);
             cleanup_interrupted_robocopy(source, destination, move_files, op)?;
-            bail!("robocopy stopped after access error: {line}");
+            bail!(
+                "Перенос остановлен из-за ошибки доступа или занятого файла. Частичные изменения откатаны. Детали robocopy: {line}"
+            );
         }
 
         if cancel_requested(cancel_path) {
@@ -429,7 +427,9 @@ fn run_robocopy(
                     &format!("Обнаружена ошибка доступа robocopy: {line}. Выполняю откат."),
                 )?;
                 cleanup_interrupted_robocopy(source, destination, move_files, op)?;
-                bail!("robocopy stopped after access error: {line}");
+                bail!(
+                    "Перенос остановлен из-за ошибки доступа или занятого файла. Частичные изменения откатаны. Детали robocopy: {line}"
+                );
             }
             write_log(
                 op,
