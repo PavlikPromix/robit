@@ -516,6 +516,8 @@ fn cleanup_interrupted_robocopy(
             )?;
             restore_source_from_destination(destination, source, ItemKind::Directory)?;
             write_log(op, "Частичный перенос возвращен в исходное место")?;
+            write_log(op, "Очищаю частичное назначение после успешного возврата")?;
+            cleanup_destination(destination, ItemKind::Directory)?;
         }
     } else {
         cleanup_destination(destination, ItemKind::Directory)?;
