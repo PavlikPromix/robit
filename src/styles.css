@@ -564,12 +564,70 @@ button:disabled {
 
 .locks-box {
   margin-top: 16px;
+  border: 1px solid #343b45;
+  border-radius: 8px;
+  background: rgba(13, 18, 22, 0.48);
 }
 
-.locks-box h2 {
-  margin: 0 0 12px;
+.locks-box summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 16px;
   color: #e5e7eb;
-  font-size: 16px;
+  cursor: pointer;
+  font-weight: 850;
+  list-style: none;
+}
+
+.locks-box summary::-webkit-details-marker {
+  display: none;
+}
+
+.locks-box summary::before {
+  content: ">";
+  color: #f0b739;
+  font-size: 15px;
+  transition: transform 0.12s ease;
+}
+
+.locks-box[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.locks-box summary span {
+  flex: 1;
+  min-width: 0;
+}
+
+.locks-box summary strong {
+  color: #f7c85b;
+  font-variant-numeric: tabular-nums;
+}
+
+.locks-list {
+  max-height: 260px;
+  overflow: auto;
+  padding: 0 14px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 183, 57, 0.35) transparent;
+}
+
+.locks-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.locks-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.locks-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: rgba(240, 183, 57, 0.45);
+  background-clip: content-box;
 }
 
 .lock-row {
@@ -578,6 +636,19 @@ button:disabled {
   gap: 8px;
   align-items: center;
   margin-top: 8px;
+}
+
+.lock-row code,
+.lock-row span,
+.lock-row strong {
+  min-width: 0;
+}
+
+.lock-row span,
+.lock-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-title {

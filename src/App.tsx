@@ -642,7 +642,6 @@ export default function App() {
 					</div>
 					<div className="progress-meta">
 					  <span>{formatProgress(previewProgress.current, previewProgress.total)}</span>
-					  {previewProgress.total >= 2000 && <span>Показан лимит глубокой проверки</span>}
 					</div>
 				  </section>
 				)}
@@ -665,16 +664,23 @@ export default function App() {
 				)}
 
 				{preview && preview.locks.length > 0 && (
-				  <section className="locks-box">
-					<h2>Файлы заняты процессами</h2>
-					{preview.locks.map((lock) => (
-					  <div className="lock-row" key={`${lock.path}-${lock.pid}`}>
-						<code>{lock.path}</code>
-						<span>{lock.process_name || lock.application_name}</span>
-						<strong>PID {lock.pid}</strong>
-					  </div>
-					))}
-				  </section>
+				  <details className="locks-box">
+					<summary>
+					  <span>Файлы заняты процессами</span>
+					  <strong>{preview.locks.length}</strong>
+					</summary>
+					<div className="locks-list">
+					  {preview.locks.map((lock, index) => (
+						<div className="lock-row" key={`${lock.path}-${lock.pid}-${index}`}>
+						  <code title={lock.path}>{lock.path}</code>
+						  <span title={lock.process_name || lock.application_name}>
+							{lock.process_name || lock.application_name}
+						  </span>
+						  <strong>PID {lock.pid}</strong>
+						</div>
+					  ))}
+					</div>
+				  </details>
 				)}
 			  </section>
 

@@ -5,8 +5,7 @@ use walkdir::WalkDir;
 
 use super::models::FileLock;
 
-const MAX_LOCK_SCAN_FILES: usize = 2_000;
-const LOCK_BATCH_SIZE: usize = 64;
+const LOCK_BATCH_SIZE: usize = 512;
 
 pub fn detect_locks(source: &Path) -> Result<Vec<FileLock>> {
     detect_locks_with_progress(source, |_, _, _| {})
@@ -24,9 +23,7 @@ where
     for (chunk_index, chunk) in paths.chunks(LOCK_BATCH_SIZE).enumerate() {
         let batch_locks = detect_locks_for_path_batch(chunk)?;
         if !batch_locks.is_empty() {
-            for path in chunk {
-                locks.extend(detect_locks_for_single_path(path)?);
-            }
+            locks.extend(detect_locks_in_locked_batch(chunk)?);
         }
 
         let current = ((chunk_index + 1) * LOCK_BATCH_SIZE).min(total);
@@ -44,9 +41,29 @@ fn paths_to_probe(source: &Path) -> Vec<PathBuf> {
         .into_iter()
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_file())
-        .take(MAX_LOCK_SCAN_FILES)
         .map(|entry| entry.path().to_path_buf())
         .collect()
+}
+
+fn detect_locks_in_locked_batch(paths: &[PathBuf]) -> Result<Vec<FileLock>> {
+    if paths.len() <= 1 {
+        return paths
+            .first()
+            .map(|path| detect_locks_for_single_path(path))
+            .unwrap_or_else(|| Ok(Vec::new()));
+    }
+
+    let middle = paths.len() / 2;
+    let mut locks = Vec::new();
+
+    for half in [&paths[..middle], &paths[middle..]] {
+        if detect_locks_for_path_batch(half)?.is_empty() {
+            continue;
+        }
+        locks.extend(detect_locks_in_locked_batch(half)?);
+    }
+
+    Ok(locks)
 }
 
 #[cfg(windows)]
